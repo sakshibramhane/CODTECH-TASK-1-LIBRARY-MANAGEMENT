@@ -1,0 +1,111 @@
+import sqlite3
+from tkinter import *
+import tkinter.ttk as ttk
+import tkinter.messagebox as mb
+from sklearn.cluster import KMeans, AgglomerativeClustering
+from sklearn.metrics import davies_bouldin_score
+import numpy as np
+
+# Connect to the database
+connector = sqlite3.connect('library.db')
+cursor = connector.cursor()
+
+# Create the Library table if it doesn't exist
+connector.execute('''
+CREATE TABLE IF NOT EXISTS Library (
+    BK_NAME TEXT,
+    BK_ID TEXT PRIMARY KEY NOT NULL,
+    AUTHOR_NAME TEXT,
+    BK_STATUS TEXT,
+    CARD_ID TEXT
+)
+''')
+
+# Function to add a new book
+def add_book():
+    bk_name = bk_name_entry.get()
+    bk_id = bk_id_entry.get()
+    author_name = author_name_entry.get()
+    bk_status = bk_status_entry.get()
+    card_id = card_id_entry.get()
+
+    if bk_name and bk_id and author_name and bk_status:
+        cursor.execute('''
+        INSERT INTO Library (BK_NAME, BK_ID, AUTHOR_NAME, BK_STATUS, CARD_ID)
+        VALUES (?, ?, ?, ?, ?)
+        ''', (bk_name, bk_id, author_name, bk_status, card_id))
+        connector.commit()
+        mb.showinfo('Success', 'Book added successfully!')
+    else:
+        mb.showerror('Error', 'All fields are required!')
+
+# Function to view all books
+def view_books():
+    cursor.execute('SELECT * FROM Library')
+    records = cursor.fetchall()
+    for row in records:
+        tree.insert("", END, values=row)
+
+# Function to perform clustering analysis
+def cluster_books():
+    cursor.execute('SELECT BK_ID, BK_STATUS FROM Library')
+    records = cursor.fetchall()
+    if records:
+        data = np.array([[int(row[0]), 1 if row[1] == 'Available' else 0] for row in records])
+        
+        # K-Means Clustering
+        kmeans = KMeans(n_clusters=2)
+        kmeans_labels = kmeans.fit_predict(data)
+        
+        # Hierarchical Clustering
+        hierarchical = AgglomerativeClustering(n_clusters=2)
+        hierarchical_labels = hierarchical.fit_predict(data)
+        
+        # Evaluate clustering results using Davies-Bouldin Index
+        kmeans_dbi = davies_bouldin_score(data, kmeans_labels)
+        hierarchical_dbi = davies_bouldin_score(data, hierarchical_labels)
+        
+        mb.showinfo('Clustering Result', f'K-Means DBI: {kmeans_dbi}\nHierarchical DBI: {hierarchical_dbi}')
+    else:
+        mb.showerror('Error', 'No data available for clustering!')
+
+# GUI setup
+root = Tk()
+root.title('Library Management System')
+
+# Labels and Entries
+Label(root, text='Book Name').grid(row=0, column=0)
+bk_name_entry = Entry(root)
+bk_name_entry.grid(row=0, column=1)
+
+Label(root, text='Book ID').grid(row=1, column=0)
+bk_id_entry = Entry(root)
+bk_id_entry.grid(row=1, column=1)
+
+Label(root, text='Author Name').grid(row=2, column=0)
+author_name_entry = Entry(root)
+author_name_entry.grid(row=2, column=1)
+
+Label(root, text='Book Status').grid(row=3, column=0)
+bk_status_entry = Entry(root)
+bk_status_entry.grid(row=3, column=1)
+
+Label(root, text='Card ID').grid(row=4, column=0)
+card_id_entry = Entry(root)
+card_id_entry.grid(row=4, column=1)
+
+# Buttons
+Button(root, text='Add Book', command=add_book).grid(row=5, column=0, columnspan=2)
+Button(root, text='View Books', command=view_books).grid(row=6, column=0, columnspan=2)
+Button(root, text='Cluster Books', command=cluster_books).grid(row=7, column=0, columnspan=2)
+
+# Treeview for displaying books
+tree = ttk.Treeview(root, columns=('BK_NAME', 'BK_ID', 'AUTHOR_NAME', 'BK_STATUS', 'CARD_ID'), show='headings')
+tree.heading('BK_NAME', text='Book Name')
+tree.heading('BK_ID', text='Book ID')
+tree.heading('AUTHOR_NAME', text='Author Name')
+tree.heading('BK_STATUS', text='Book Status')
+tree.heading('CARD_ID', text='Card ID')
+tree.grid(row=8, column=0, columnspan=2)
+
+root.mainloop()
